@@ -16,7 +16,7 @@ export function MessageBubble({
   author,
   time,
   children,
-  mine,
+  mine = false,
   reply,
   reaction,
 }: MessageBubbleProps) {
@@ -37,9 +37,12 @@ export function MessageBubble({
   };
 
   return (
-    <div className={mine ? "flex justify-end" : "flex justify-start"}>
+    <div className={mine ? "flex w-full justify-end" : "flex w-full justify-start"}>
       <div
-        className="group/message max-w-[72%]"
+        className={[
+          "group/message max-w-[72%]",
+          mine ? "items-end" : "items-start",
+        ].join(" ")}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
@@ -76,7 +79,12 @@ export function MessageBubble({
           {children}
 
           {reaction ? (
-            <div className="absolute -bottom-4 right-4 rounded-full border border-white bg-white px-2 py-1 text-xs shadow-lg">
+            <div
+              className={[
+                "absolute -bottom-4 rounded-full border border-white bg-white px-2 py-1 text-xs shadow-lg",
+                mine ? "right-4" : "left-4",
+              ].join(" ")}
+            >
               {reaction}
             </div>
           ) : null}

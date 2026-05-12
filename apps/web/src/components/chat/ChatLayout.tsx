@@ -1,75 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChatNavRail } from "./ChatNavRail";
 import { ConversationList } from "./ConversationList";
 import { ChatWindow } from "./ChatWindow";
 import { ChatDetailsPanel } from "./ChatDetailsPanel";
-
-const initialConversations = [
-  {
-    id: "project-aurora",
-    name: "Project Aurora",
-    preview: "Lena: Finalizing the roadmap...",
-    time: "9:41",
-    initials: "PA",
-    unread: 6,
-    online: true,
-    accent: "from-violet-300 to-cyan-300",
-    subtitle: "8 members • Priya is typing...",
-  },
-  {
-    id: "design-system",
-    name: "Design System Team",
-    preview: "Ethan: New tokens added",
-    time: "9:32",
-    initials: "DS",
-    unread: 3,
-    online: true,
-    accent: "from-fuchsia-300 to-violet-300",
-    subtitle: "5 members • Ethan is online",
-  },
-  {
-    id: "marketing-sync",
-    name: "Marketing Sync",
-    preview: "Priya: Campaign update",
-    time: "9:15",
-    initials: "MS",
-    unread: 2,
-    accent: "from-amber-200 to-rose-300",
-    subtitle: "12 members • Campaign planning",
-  },
-  {
-    id: "dev-lounge",
-    name: "Dev Lounge",
-    preview: "Arjun: Pushed the fix",
-    time: "8:47",
-    initials: "</>",
-    online: true,
-    accent: "from-emerald-200 to-cyan-300",
-    subtitle: "24 members • Developers online",
-  },
-  {
-    id: "nova-labs",
-    name: "Client • Nova Labs",
-    preview: "You: Shared the proposal",
-    time: "Yesterday",
-    initials: "NL",
-    accent: "from-slate-200 to-blue-200",
-    subtitle: "Client chat",
-  },
-  {
-    id: "ux-research",
-    name: "UX Research",
-    preview: "Sofia: Notes attached",
-    time: "Mon",
-    initials: "UX",
-    accent: "from-indigo-200 to-violet-200",
-    subtitle: "Research team",
-  },
-];
-
-export type Conversation = (typeof initialConversations)[number];
+import { api, type ApiConversation, type ApiMessage } from "../../lib/api";
+export type Conversation = {
+  id: string;
+  name: string;
+  preview: string;
+  time: string;
+  initials: string;
+  unread?: number;
+  online?: boolean;
+  accent: string;
+  subtitle: string;
+};
 
 export type ChatMessage = {
   id: string;
@@ -79,93 +26,138 @@ export type ChatMessage = {
   author?: string;
 };
 
-const initialMessagesByConversationId: Record<string, ChatMessage[]> = {
-  "project-aurora": [
-    {
-      id: "pa-1",
-      author: "Lena Martinez",
-      time: "9:31 AM",
-      text: "Here’s the latest roadmap. Let’s align on priorities for the next sprint.",
-    },
-    {
-      id: "pa-2",
-      mine: true,
-      time: "9:34 AM",
-      text: "Looks great! I’ll review and share feedback soon.",
-    },
-    {
-      id: "pa-3",
-      author: "Arjun Dev",
-      time: "9:36 AM",
-      text: "I’ll take point on the onboarding improvements.",
-    },
-  ],
-  "design-system": [
-    {
-      id: "ds-1",
-      author: "Ethan",
-      time: "9:32 AM",
-      text: "New design tokens were added to the theme package.",
-    },
-  ],
-  "marketing-sync": [
-    {
-      id: "ms-1",
-      author: "Priya",
-      time: "9:15 AM",
-      text: "Campaign update is ready for review.",
-    },
-  ],
-  "dev-lounge": [
-    {
-      id: "dev-1",
-      author: "Arjun",
-      time: "8:47 AM",
-      text: "Pushed the fix. Can someone review?",
-    },
-  ],
-  "nova-labs": [
-    {
-      id: "nl-1",
-      mine: true,
-      time: "Yesterday",
-      text: "Shared the proposal.",
-    },
-  ],
-  "ux-research": [
-    {
-      id: "ux-1",
-      author: "Sofia",
-      time: "Mon",
-      text: "Research notes attached.",
-    },
-  ],
-};
+function formatTime(value?: string | null) {
+  if (!value) return "";
 
-function getCurrentTime() {
   return new Intl.DateTimeFormat("en", {
     hour: "numeric",
     minute: "2-digit",
-  }).format(new Date());
+  }).format(new Date(value));
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function mapConversation(item: ApiConversation): Conversation {
+  const name = item.name || item.otherUser?.name || item.other_user_name || "Unknown user";
+
+  const lastMessage = item.lastMessage?.content || item.last_message || "No messages yet";
+
+  const lastMessageTime =
+    item.lastMessage?.createdAt ||
+    item.lastMessage?.created_at ||
+    item.last_message_at ||
+    item.updatedAt ||
+    item.updated_at ||
+    item.createdAt ||
+    item.created_at;
+
+  return {
+    id: item.id,
+    name,
+    preview: lastMessage,
+    time: formatTime(lastMessageTime),
+    initials: getInitials(name),
+    online: true,
+    accent: "from-violet-300 to-cyan-300",
+    subtitle:
+      item.type === "DIRECT"
+        ? item.otherUser?.email || item.other_user_email || "Direct message"
+        : "Group chat",
+  };
+}
+
+function mapMessage(message: ApiMessage, currentUserId?: string): ChatMessage {
+  const senderId = message.senderId || message.sender_id || message.sender?.id;
+
+  return {
+    id: message.id,
+    text: message.content,
+    time: formatTime(message.createdAt || message.created_at),
+    mine: String(senderId) === String(currentUserId),
+    author: message.sender?.name || message.sender_name,
+  };
 }
 
 export function ChatLayout() {
-  const [conversations, setConversations] = useState(initialConversations);
-
-  const [selectedConversationId, setSelectedConversationId] = useState(
-    initialConversations[0].id
-  );
-
-  const [messagesByConversationId, setMessagesByConversationId] = useState(
-    initialMessagesByConversationId
-  );
+  const [currentUserId, setCurrentUserId] = useState<string>();
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedConversationId, setSelectedConversationId] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const selectedConversation =
     conversations.find((item) => item.id === selectedConversationId) ??
     conversations[0];
 
-  const selectedMessages =
-    messagesByConversationId[selectedConversationId] ?? [];
+  useEffect(() => {
+    async function bootstrap() {
+      try {
+        setLoading(true);
+        setError("");
+
+        let token = localStorage.getItem("accessToken");
+
+        if (!token) {
+          const loginResult = await api.login({
+            email: "user1@test.com",
+            password: "123456",
+          });
+
+          token = loginResult.accessToken;
+          localStorage.setItem("accessToken", token);
+          setCurrentUserId(loginResult.user.id);
+        } else {
+          const meResult = await api.me();
+          setCurrentUserId(meResult.user.id);
+        }
+
+        const conversationsResult = await api.getConversations();
+        const mappedConversations =
+          conversationsResult.conversations.map(mapConversation);
+
+        setConversations(mappedConversations);
+
+        if (mappedConversations[0]) {
+          setSelectedConversationId(mappedConversations[0].id);
+        }
+      } catch (err) {
+        console.error(err);
+        setError(err instanceof Error ? err.message : "Failed to load chat");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    bootstrap();
+  }, []);
+
+  useEffect(() => {
+    async function loadMessages() {
+      if (!selectedConversationId) return;
+
+      try {
+        const result = await api.getMessages(selectedConversationId);
+
+        setMessages(
+          result.messages.map((message) => mapMessage(message, currentUserId))
+        );
+      } catch (err) {
+        console.error(err);
+        setError(err instanceof Error ? err.message : "Failed to load messages");
+      }
+    }
+
+    loadMessages();
+  }, [selectedConversationId, currentUserId]);
 
   const handleSelectConversation = (conversationId: string) => {
     setSelectedConversationId(conversationId);
@@ -179,41 +171,68 @@ export function ChatLayout() {
     );
   };
 
-  const handleSendMessage = (text: string) => {
+  const handleSendMessage = async (text: string) => {
     const trimmedText = text.trim();
 
-    if (!trimmedText) return;
+    if (!trimmedText || !selectedConversationId) return;
 
-    const sentTime = getCurrentTime();
+    try {
+      const result = await api.sendMessage(selectedConversationId, trimmedText);
+      const newMessage = mapMessage(result.message, currentUserId);
 
-    const newMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      mine: true,
-      text: trimmedText,
-      time: sentTime,
-    };
+      setMessages((current) => [...current, newMessage]);
 
-    setMessagesByConversationId((current) => ({
-      ...current,
-      [selectedConversationId]: [
-        ...(current[selectedConversationId] ?? []),
-        newMessage,
-      ],
-    }));
-
-    setConversations((current) =>
-      current.map((conversation) =>
-        conversation.id === selectedConversationId
-          ? {
-              ...conversation,
-              preview: `You: ${trimmedText}`,
-              time: sentTime,
-              unread: undefined,
-            }
-          : conversation
-      )
-    );
+      setConversations((current) =>
+        current.map((conversation) =>
+          conversation.id === selectedConversationId
+            ? {
+                ...conversation,
+                preview: `You: ${trimmedText}`,
+                time: newMessage.time,
+                unread: undefined,
+              }
+            : conversation
+        )
+      );
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Failed to send message");
+    }
   };
+
+  if (loading) {
+    return (
+      <main className="fixed inset-0 grid place-items-center bg-[#eef3ff] text-slate-950">
+        <div className="rounded-3xl bg-white/80 px-6 py-4 text-sm font-black shadow-xl">
+          Loading chat...
+        </div>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="fixed inset-0 grid place-items-center bg-[#eef3ff] p-6 text-slate-950">
+        <div className="max-w-md rounded-3xl bg-white/80 px-6 py-4 text-center shadow-xl">
+          <p className="text-sm font-black text-rose-600">API Error</p>
+          <p className="mt-2 text-xs font-semibold text-slate-500">{error}</p>
+          <p className="mt-3 text-xs font-semibold text-slate-400">
+            Check backend is running at http://localhost:4000 and test user exists.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!selectedConversation) {
+    return (
+      <main className="fixed inset-0 grid place-items-center bg-[#eef3ff] text-slate-950">
+        <div className="rounded-3xl bg-white/80 px-6 py-4 text-sm font-black shadow-xl">
+          No conversations yet
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="fixed inset-0 h-[100svh] max-h-[100svh] overflow-hidden bg-[#eef3ff] p-0 text-slate-950 md:p-3">
@@ -233,7 +252,7 @@ export function ChatLayout() {
 
           <ChatWindow
             conversation={selectedConversation}
-            messages={selectedMessages}
+            messages={messages}
             onSendMessage={handleSendMessage}
           />
 
